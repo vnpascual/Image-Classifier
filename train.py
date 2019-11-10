@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch import optim
+from torch.optim import lr_scheduler
 import torch.nn.functional as F
 from torchvision import datasets, transforms, models
 from PIL import Image
@@ -47,29 +48,32 @@ def get_args():
     
     return parser.parse_args()
 
-def save_model(model, train_data, optimizer, epochs, save_to):
+def save_model(model, arch, hidden_units, train_data, optimizer, epochs, save_to):
      model.class_to_idx = train_data.class_to_idx
      checkpoint = {'model_name': 'model',
               'classifier': model.classifier,
               'state_dict': model.state_dict(),
               'optimizer_dict':optimizer.state_dict(),
               'class_to_idx': model.class_to_idx,
-              'epoch': epochs}
+              'epoch': epochs,
+              'arch': arch,
+              'hidden_units': hidden_units}
 
      torch.save(checkpoint, save_to) 
      print("Model is saved!")
     
-def create_model():
+def create_model(arch = 'vgg11', hidden_units = 500):
     #PRE-TRAIN MODEL
     # Load pre-trained model
-    model = models.vgg11 (pretrained = True)
+    model = getattr(models, arch)(pretrained = True)
+    in_features = model.classifier[0].in_features
     # Freeze Parameters
  
     for param in model.parameters():
         param.requires_grad = False
   
     classifier = nn.Sequential(OrderedDict([
-                          ('fc1', nn.Linear(25088, 500)),
+                          ('fc1', nn.Linear(25088, hidden_units)),
                           ('relu', nn.ReLU()),
                           ('dropout1', nn.Dropout(0.05)),
                           ('fc2', nn.Linear(500, 102)),
@@ -79,8 +83,9 @@ def create_model():
     model.classifier = classifier
 
     criterion = nn.NLLLoss()
-    optimizer = optim.Adam(model.classifier.parameters(),     lr=0.0001)# define criterion and optimizer
-    return model, criterion, optimizer
+    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)# define criterion and optimizer
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.1)
+    return model, criterion, optimizer, scheduler
     print("Your model is created.")
 
 def validation(model, validloader, criterion):
@@ -174,7 +179,7 @@ def test(model, trainloader):
         
     print('Test Accuracy:{}'.format(100 * correct / total))
 
-def main_function():
+def main_function(arch = 'vgg11', hidden_units = 500, learning_rate=0.001):
     input = get_args()
     # LOAD DATA 
     # load and process images from data directory
@@ -213,30 +218,35 @@ def main_function():
     class_to_idx = train_data.class_to_idx
         #PRE-TRAIN MODEL
     # Load pre-trained model
-    model = models.vgg11 (pretrained = True)
+    model =  getattr(models,arch)(pretrained=True)
+    in_features = model.classifier[0].in_features
     # Freeze Parameters
  
     for param in model.parameters():
         param.requires_grad = False
   
     classifier = nn.Sequential(OrderedDict([
-                          ('fc1', nn.Linear(25088, 500)),
+                          ('fc1', nn.Linear(in_features, hidden_units)),
                           ('relu', nn.ReLU()),
                           ('dropout1', nn.Dropout(0.05)),
-                          ('fc2', nn.Linear(500, 102)),
-                          ('output', nn.LogSoftmax(dim=1))
+                          ('fc2',nn.Linear(hidden_units,512)),
+                          ('relu2',nn.ReLU()),
+                          ('Dropout2',nn.Dropout(p=0.15)),
+                          ('fc3',nn.Linear(512,102)),
+                          ('output',nn.LogSoftmax(dim=1))
                           ]))
 
     model.classifier = classifier
     model.to('cuda')
     
     criterion = nn.NLLLoss()
-    optimizer = optim.Adam(model.classifier.parameters(), lr=0.0001) # define criterion and optimizer
-    
+    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate) # define criterion and optimizer
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.1)
+    print("Your model is created.")
     model = train(model, trainloader, validloader, criterion, optimizer, epochs)
     
     test(model, trainloader)
-    save_model(model, train_data, optimizer, epochs, save_to)
+    save_model(model,arch, hidden_units, train_data, optimizer, epochs, save_to)                                    
 
-main_function()                                     
+main_function(arch = 'vgg11', hidden_units = 500, learning_rate=0.001)                                
                                              
