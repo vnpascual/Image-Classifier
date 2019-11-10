@@ -47,18 +47,23 @@ def load_checkpoint(filename):
     # Checkpoint for when using GPU
     checkpoint = torch.load(filename)
     
-    model = models.vgg11 (pretrained = True)
+    model =  getattr(models, checkpoint['arch'])(pretrained=True)
+    in_features = model.classifier[0].in_features
+    hidden_units = checkpoint['hidden_units']
     # Freeze Parameters
  
     for param in model.parameters():
         param.requires_grad = False
   
     classifier = nn.Sequential(OrderedDict([
-                          ('fc1', nn.Linear(25088, 500)),
+                          ('fc1', nn.Linear(in_features, hidden_units)),
                           ('relu', nn.ReLU()),
                           ('dropout1', nn.Dropout(0.05)),
-                          ('fc2', nn.Linear(500, 102)),
-                          ('output', nn.LogSoftmax(dim=1))
+                          ('fc2',nn.Linear(hidden_units,512)),
+                          ('relu2',nn.ReLU()),
+                          ('Dropout2',nn.Dropout(p=0.15)),
+                          ('fc3',nn.Linear(512,102)),
+                          ('output',nn.LogSoftmax(dim=1))
                           ]))
 
     model.classifier = classifier
